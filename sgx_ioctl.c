@@ -74,7 +74,8 @@
 #include <linux/shmem_fs.h>
 #include <linux/mm.h>
 #include <linux/mm_types.h>
-
+#include <linux/rwsem.h>
+#include <linux/sched/mm.h>
 static int sgx_get_encl(unsigned long addr, struct sgx_encl **encl)
 {
 	struct mm_struct *mm = current->mm;
@@ -257,17 +258,27 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
                                      unsigned long arg)
 {
     unsigned long addr = arg;
-    struct mm_struct *mm = current->mm;
+    struct mm_struct *mm = get_task_mm(current);
     struct vm_area_struct *vma = NULL;
     struct sgx_encl_page *entry;
+    down_write(&mm->mmap_sem);
     vma = find_vma(mm, addr);
-    if (!vma || addr < vma->vm_start)
+    if (!vma || addr < vma->vm_start) {
+        up_write(&mm->mmap_sem);
+        mmput(mm);
         return -EFAULT;
+    }
     entry = sgx_fault_page(vma, addr, 0);
-    if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY)
+    if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
+        up_write(&mm->mmap_sem);
+        mmput(mm);
         return VM_FAULT_NOPAGE;
-    else
+    }
+    else {
+        up_write(&mm->mmap_sem);
+        mmput(mm);
         return VM_FAULT_SIGBUS;
+    }
 }
 
 typedef long (*sgx_ioc_t)(struct file *filep, unsigned int cmd,
