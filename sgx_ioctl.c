@@ -265,10 +265,7 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
     down_write(&mm->mmap_sem);
     vma = find_vma(mm, addr);
     if (!vma || addr < vma->vm_start) {
-		if (vma)
-			printk(KERN_DEBUG "%s: addr: 0x%lx, vm_start: 0x%lx\n", __func__, addr, vma->vm_start);
-        else
-			printk(KERN_DEBUG "%s: may be 5 addr: 0x%lx\n", __func__, addr);
+        up_write(&mm->mmap_sem);
 		mmput(mm);
         return -EFAULT;
     }
@@ -276,13 +273,11 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
     if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
         up_write(&mm->mmap_sem);
         mmput(mm);
-		printk(KERN_DEBUG "%s: may be 0 addr: 0x%lx\n", __func__, addr);
         return 0;
     }
     else {
         up_write(&mm->mmap_sem);
         mmput(mm);
-		printk(KERN_DEBUG "%s:may be 25 addr: 0x%lx\n", __func__, addr);
         return -EFAULT;
     }
 }
@@ -307,7 +302,6 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		handler = sgx_ioc_enclave_init;
 		break;
     case SGX_IOC_ENCLAVE_SWAP_PAGE:
-		printk(KERN_DEBUG "%s: before copy arg size: %d\n", __func__, (int)_IOC_SIZE(cmd));
         handler = sgx_ioc_enclave_swap_page;
         break;
     default:
@@ -316,9 +310,6 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 
 	if (copy_from_user(data, (void __user *)arg, _IOC_SIZE(cmd)))
 		return -EFAULT;
-	
-	printk(KERN_DEBUG "%s: arg size: %d\n", __func__, (int)_IOC_SIZE(cmd));
-	printk(KERN_DEBUG "%s: arg addr: 0x%lx\n", __func__, (unsigned long)arg);
 	ret = handler(filep, cmd, (unsigned long)((void *)data));
 	if (!ret && (cmd & IOC_OUT)) {
 		if (copy_to_user((void __user *)arg, data, _IOC_SIZE(cmd)))

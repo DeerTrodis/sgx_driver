@@ -339,7 +339,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 				     unsigned int flags)
 {
 	struct sgx_encl_page *entry;
-
+	printk("Page Fault Happens!");
 	do {
 		entry = sgx_do_fault(vma, addr, flags);
 		if (!(flags & SGX_FAULT_RESERVE))
