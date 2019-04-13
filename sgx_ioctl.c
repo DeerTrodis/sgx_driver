@@ -76,6 +76,10 @@
 #include <linux/mm_types.h>
 #include <linux/rwsem.h>
 #include <linux/sched/mm.h>
+#include <linux/types.h>
+
+struct sgx_user_data user_data;
+
 static int sgx_get_encl(unsigned long addr, struct sgx_encl **encl)
 {
 	struct mm_struct *mm = current->mm;
@@ -257,29 +261,40 @@ out:
 static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
                                      unsigned long arg)
 {
-    struct sgx_enclave_swap_page *swapp = (struct sgx_enclave_swap_page *)arg;
+	struct sgx_enclave_swap_page *swapp = (struct sgx_enclave_swap_page *)arg;
 	unsigned long addr = (unsigned long)swapp->addr;
-    struct mm_struct *mm = get_task_mm(current);
-    struct vm_area_struct *vma = NULL;
-    struct sgx_encl_page *entry;
-    down_write(&mm->mmap_sem);
-    vma = find_vma(mm, addr);
-    if (!vma || addr < vma->vm_start) {
-        up_write(&mm->mmap_sem);
+	struct mm_struct *mm = get_task_mm(current);
+	struct vm_area_struct *vma = NULL;
+	struct sgx_encl_page *entry;
+
+	down_write(&mm->mmap_sem);
+
+	vma = find_vma(mm, addr);
+	if (!vma || addr < vma->vm_start) {
+		up_write(&mm->mmap_sem);
 		mmput(mm);
-        return -EFAULT;
-    }
-    entry = sgx_fault_page(vma, addr, 0);
-    if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
-        up_write(&mm->mmap_sem);
-        mmput(mm);
-        return 0;
-    }
-    else {
-        up_write(&mm->mmap_sem);
-        mmput(mm);
-        return -EFAULT;
-    }
+		return -EFAULT;
+	}
+
+	entry = sgx_fault_page(vma, addr, 0);
+	if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
+		up_write(&mm->mmap_sem);
+		mmput(mm);
+		return 0;
+	} else {
+		up_write(&mm->mmap_sem);
+		mmput(mm);
+		return -EFAULT;
+	}
+}
+
+static void sgx_ioc_set_user_data(struct file *filep, unsigned int cmd,
+				 unsigned long arg)
+{
+	struct sgx_user_data *pdata = (void *)arg;
+
+	user_data.load_bias = pdata->load_bias;
+	user_data.tcs_addr = pdata->tcs_addr;
 }
 
 typedef long (*sgx_ioc_t)(struct file *filep, unsigned int cmd,
@@ -290,7 +305,9 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	char data[256];
 	sgx_ioc_t handler = NULL;
 	long ret;
+	unsigned long long cc, handler_cc, copy_from_cc, copy_to_cc;
 
+	cc = rdtsc();
 	switch (cmd) {
 	case SGX_IOC_ENCLAVE_CREATE:
 		handler = sgx_ioc_enclave_create;
@@ -301,20 +318,33 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	case SGX_IOC_ENCLAVE_INIT:
 		handler = sgx_ioc_enclave_init;
 		break;
-    case SGX_IOC_ENCLAVE_SWAP_PAGE:
-        handler = sgx_ioc_enclave_swap_page;
-        break;
-    default:
+	case SGX_IOC_ENCLAVE_SWAP_PAGE:
+		handler = sgx_ioc_enclave_swap_page;
+		break;
+	case SGX_IOC_ENCLAVE_ENABLE_SIGNAL:
+		handler = sgx_ioc_set_user_data;
+		break;
+	case SGX_IOC_ENCLAVE_DISABLE_SIGNAL:
+		if ((pid_t)atomic64_read(&signal_pid_flag) == current->tgid)
+			atomic64_set(&signal_pid_flag, 0);
+		return 0;
+	default:
 		return -ENOIOCTLCMD;
 	}
 
+	copy_from_cc = rdtsc();
 	if (copy_from_user(data, (void __user *)arg, _IOC_SIZE(cmd)))
 		return -EFAULT;
+	copy_from_cc = rdtsc() - copy_from_cc;
+	handler_cc = rdtsc();
 	ret = handler(filep, cmd, (unsigned long)((void *)data));
+	handler_cc = rdtsc() - handler_cc;
+	copy_to_cc = rdtsc();
 	if (!ret && (cmd & IOC_OUT)) {
 		if (copy_to_user((void __user *)arg, data, _IOC_SIZE(cmd)))
 			return -EFAULT;
 	}
-
+	copy_to_cc = rdtsc() - copy_to_cc;
+	cc = rdtsc() - cc;
 	return ret;
 }

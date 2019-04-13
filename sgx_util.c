@@ -61,11 +61,17 @@
 #include "sgx.h"
 #include <linux/highmem.h>
 #include <linux/shmem_fs.h>
+#include <asm/siginfo.h>
+#include <linux/sched/signal.h>
+#include <linux/types.h>
+
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0))
 	#include <linux/sched/mm.h>
 #else
 	#include <linux/mm.h>
 #endif
+
+extern struct sgx_user_data user_data;
 
 struct page *sgx_get_backing(struct sgx_encl *encl,
 			     struct sgx_encl_page *entry,
@@ -339,12 +345,26 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 				     unsigned int flags)
 {
 	struct sgx_encl_page *entry;
-	printk("Page Fault Happens!");
+	struct siginfo info;
+	unsigned long bias = (unsigned long)atomic64_read(&load_bias);
+
+	memset(&info, 0, sizeof(struct siginfo));
+	info.si_signo = SIGTRAP;
+	info.si_code = SI_QUEUE; /* Nevermind this */
+
+	printk("Page Fault Happens: 0x%lx!\n", addr);
+/*
+	if ((pid_t)atomic64_read(&signal_pid_flag) == current->tgid)
+		if (send_sig_info(60, &info, current) < 0)
+			printk("%s: Send signal failed.\n", __func__);
+*/
 	do {
 		entry = sgx_do_fault(vma, addr, flags);
 		if (!(flags & SGX_FAULT_RESERVE))
 			break;
 	} while (PTR_ERR(entry) == -EBUSY);
+
+	/* print out the rip */
 
 	return entry;
 }

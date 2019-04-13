@@ -70,7 +70,11 @@
 #define SGX_IOC_ENCLAVE_INIT \
 	_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init)
 #define SGX_IOC_ENCLAVE_SWAP_PAGE \
-    _IOW(SGX_MAGIC, 0X03, struct sgx_enclave_swap_page)
+	_IOW(SGX_MAGIC, 0X03, struct sgx_enclave_swap_page)
+#define SGX_IOC_ENCLAVE_ENABLE_SIGNAL \
+	_IOW(SGX_MAGIC, 0X04, struct sgx_enclave_swap_page)
+#define SGX_IOC_ENCLAVE_DISABLE_SIGNAL \
+	_IOW(SGX_MAGIC, 0X05, struct sgx_enclave_swap_page)
 
 
 /* SGX leaf instruction return values */
@@ -140,6 +144,12 @@ struct sgx_enclave_init {
 } __attribute__((__packed__));
 
 struct sgx_enclave_swap_page {
-    __u64 addr;
+	__u64 addr;
 } __attribute__((__packed__));
+
+struct sgx_user_data {
+	unsigned long load_bias;
+	unsigned long tcs_addr;
+};
+
 #endif /* _UAPI_ASM_X86_SGX_H */
