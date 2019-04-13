@@ -346,7 +346,6 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 {
 	struct sgx_encl_page *entry;
 	struct siginfo info;
-	unsigned long bias = (unsigned long)atomic64_read(&load_bias);
 
 	memset(&info, 0, sizeof(struct siginfo));
 	info.si_signo = SIGTRAP;

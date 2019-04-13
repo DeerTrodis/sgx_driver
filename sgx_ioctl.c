@@ -288,15 +288,6 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 	}
 }
 
-static void sgx_ioc_set_user_data(struct file *filep, unsigned int cmd,
-				 unsigned long arg)
-{
-	struct sgx_user_data *pdata = (void *)arg;
-
-	user_data.load_bias = pdata->load_bias;
-	user_data.tcs_addr = pdata->tcs_addr;
-}
-
 typedef long (*sgx_ioc_t)(struct file *filep, unsigned int cmd,
 			  unsigned long arg);
 
@@ -322,11 +313,8 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		handler = sgx_ioc_enclave_swap_page;
 		break;
 	case SGX_IOC_ENCLAVE_ENABLE_SIGNAL:
-		handler = sgx_ioc_set_user_data;
-		break;
+		return 0;
 	case SGX_IOC_ENCLAVE_DISABLE_SIGNAL:
-		if ((pid_t)atomic64_read(&signal_pid_flag) == current->tgid)
-			atomic64_set(&signal_pid_flag, 0);
 		return 0;
 	default:
 		return -ENOIOCTLCMD;
