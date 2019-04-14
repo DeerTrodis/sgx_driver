@@ -75,6 +75,8 @@
 	_IOW(SGX_MAGIC, 0X04, struct sgx_enclave_swap_page)
 #define SGX_IOC_ENCLAVE_DISABLE_SIGNAL \
 	_IOW(SGX_MAGIC, 0X05, struct sgx_enclave_swap_page)
+#define SGX_IOC_ENCLAVE_PIN_PAGE \
+	_IOW(SGX_MAGIC, 0X06, struct sgx_enclave_swap_page)
 
 
 /* SGX leaf instruction return values */

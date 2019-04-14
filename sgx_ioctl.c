@@ -258,8 +258,8 @@ out:
 	return ret;
 }
 
-static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
-                                     unsigned long arg)
+static long __sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
+                                     unsigned long arg, unsigned int flag)
 {
 	struct sgx_enclave_swap_page *swapp = (struct sgx_enclave_swap_page *)arg;
 	unsigned long addr = (unsigned long)swapp->addr;
@@ -276,7 +276,7 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 		return -EFAULT;
 	}
 
-	entry = sgx_fault_page(vma, addr, 0);
+	entry = sgx_fault_page(vma, addr, flag);
 	if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
 		up_write(&mm->mmap_sem);
 		mmput(mm);
@@ -287,6 +287,21 @@ static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 		return -EFAULT;
 	}
 }
+
+static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
+                                     unsigned long arg)
+{
+    return __sgx_ioc_enclave_swap_page(filep, cmd, arg, 0);
+}
+
+
+static long sgx_ioc_enclave_pin_page(struct file *filep, unsigned int cmd,
+                                     unsigned long arg)
+{
+    return __sgx_ioc_enclave_swap_page(filep, cmd, arg, SGX_FAULT_RESERVE);
+}
+
+
 
 typedef long (*sgx_ioc_t)(struct file *filep, unsigned int cmd,
 			  unsigned long arg);
@@ -316,6 +331,9 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 		return 0;
 	case SGX_IOC_ENCLAVE_DISABLE_SIGNAL:
 		return 0;
+    case SGX_IOC_ENCLAVE_PIN_PAGE:
+        handler = sgx_ioc_enclave_pin_page;
+        break;
 	default:
 		return -ENOIOCTLCMD;
 	}
