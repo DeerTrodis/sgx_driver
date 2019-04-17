@@ -71,10 +71,8 @@
 	_IOW(SGX_MAGIC, 0x02, struct sgx_enclave_init)
 #define SGX_IOC_ENCLAVE_SWAP_PAGE \
 	_IOW(SGX_MAGIC, 0X03, struct sgx_enclave_swap_page)
-#define SGX_IOC_ENCLAVE_ENABLE_SIGNAL \
-	_IOW(SGX_MAGIC, 0X04, struct sgx_enclave_swap_page)
-#define SGX_IOC_ENCLAVE_DISABLE_SIGNAL \
-	_IOW(SGX_MAGIC, 0X05, struct sgx_enclave_swap_page)
+#define SGX_IOC_ENCLAVE_SET_USER_DATA \
+	_IOW(SGX_MAGIC, 0X04, struct sgx_user_data)
 #define SGX_IOC_ENCLAVE_PIN_PAGE \
 	_IOW(SGX_MAGIC, 0X06, struct sgx_enclave_swap_page)
 

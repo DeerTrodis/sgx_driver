@@ -301,7 +301,21 @@ static long sgx_ioc_enclave_pin_page(struct file *filep, unsigned int cmd,
     return __sgx_ioc_enclave_swap_page(filep, cmd, arg, SGX_FAULT_RESERVE);
 }
 
+static long sgx_ioc_enclave_set_user_data(struct file *filep, unsigned int cmd,
+					 unsigned long arg)
+{
+	struct sgx_user_data *data = (void *)arg;
+	struct sgx_enclave_swap_page sswap;
 
+	user_data.load_bias = data->load_bias;
+	user_data.tcs_addr = data->tcs_addr;
+	sswap.addr = data->tcs_addr + 4096 + 4096 * 4 + GPRSGX_SIZE;
+
+	sgx_ioc_enclave_pin_page(filep, SGX_IOC_ENCLAVE_PIN_PAGE, (unsigned long)&sswap);
+	printk("sgx: set user data: {.load_bias = 0x%lx, tcs_addr = 0x%lx}\n",
+	      user_data.load_bias, user_data.tcs_addr);
+	return 0;
+}
 
 typedef long (*sgx_ioc_t)(struct file *filep, unsigned int cmd,
 			  unsigned long arg);
@@ -327,13 +341,12 @@ long sgx_ioctl(struct file *filep, unsigned int cmd, unsigned long arg)
 	case SGX_IOC_ENCLAVE_SWAP_PAGE:
 		handler = sgx_ioc_enclave_swap_page;
 		break;
-	case SGX_IOC_ENCLAVE_ENABLE_SIGNAL:
-		return 0;
-	case SGX_IOC_ENCLAVE_DISABLE_SIGNAL:
-		return 0;
-    case SGX_IOC_ENCLAVE_PIN_PAGE:
-        handler = sgx_ioc_enclave_pin_page;
-        break;
+	case SGX_IOC_ENCLAVE_SET_USER_DATA:
+		handler = sgx_ioc_enclave_set_user_data;
+		break;
+	case SGX_IOC_ENCLAVE_PIN_PAGE:
+		handler = sgx_ioc_enclave_pin_page;
+		break;
 	default:
 		return -ENOIOCTLCMD;
 	}

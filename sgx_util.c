@@ -340,6 +340,69 @@ out:
 	return rc ? ERR_PTR(rc) : entry;
 }
 
+static inline int sgx_vma_access_word(struct sgx_encl *encl,
+				      unsigned long addr,
+				      void *buf,
+				      int len,
+				      int write,
+				      struct sgx_encl_page *encl_page,
+				      int i)
+{
+	char data[sizeof(unsigned long)];
+	int align, cnt, offset;
+	void *vaddr;
+	int ret;
+
+	offset = ((addr + i) & (PAGE_SIZE - 1)) & ~(sizeof(unsigned long) - 1);
+	align = (addr + i) & (sizeof(unsigned long) - 1);
+	cnt = sizeof(unsigned long) - align;
+	cnt = min(cnt, len - i);
+
+	if (write) {
+		if (encl_page->flags & SGX_ENCL_PAGE_TCS &&
+		    (offset < 8 || (offset + (len - i)) > 16))
+			return -ECANCELED;
+
+		if (align || (cnt != sizeof(unsigned long))) {
+			vaddr = sgx_get_page(encl_page->epc_page);
+			ret = __edbgrd((void *)((unsigned long)vaddr + offset),
+				       (unsigned long *)data);
+			sgx_put_page(vaddr);
+			if (ret) {
+				sgx_dbg(encl, "EDBGRD returned %d\n", ret);
+				return -EFAULT;
+			}
+		}
+
+		memcpy(data + align, buf + i, cnt);
+		vaddr = sgx_get_page(encl_page->epc_page);
+		ret = __edbgwr((void *)((unsigned long)vaddr + offset),
+			       (unsigned long *)data);
+		sgx_put_page(vaddr);
+		if (ret) {
+			sgx_dbg(encl, "EDBGWR returned %d\n", ret);
+			return -EFAULT;
+		}
+	} else {
+		if (encl_page->flags & SGX_ENCL_PAGE_TCS &&
+		    (offset + (len - i)) > 72)
+			return -ECANCELED;
+
+		vaddr = sgx_get_page(encl_page->epc_page);
+		ret = __edbgrd((void *)((unsigned long)vaddr + offset),
+			       (unsigned long *)data);
+		sgx_put_page(vaddr);
+		if (ret) {
+			sgx_dbg(encl, "EDBGRD returned %d\n", ret);
+			return -EFAULT;
+		}
+
+		memcpy(buf + i, data + align, cnt);
+	}
+
+	return cnt;
+}
+
 struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 				     unsigned long addr,
 				     unsigned int flags)
@@ -351,7 +414,8 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	info.si_signo = SIGTRAP;
 	info.si_code = SI_QUEUE; /* Nevermind this */
 
-	printk("Page Fault Happens: 0x%lx!\n", addr);
+	if (user_data.load_bias && user_data.tcs_addr)
+		printk("Page Fault Happens: 0x%lx!\n", addr);
 /*
 	if ((pid_t)atomic64_read(&signal_pid_flag) == current->tgid)
 		if (send_sig_info(60, &info, current) < 0)
@@ -364,7 +428,48 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	} while (PTR_ERR(entry) == -EBUSY);
 
 	/* print out the rip */
+	if (user_data.load_bias && user_data.tcs_addr) {
+		unsigned long rip_in_file;
+		int len = sizeof(unsigned long), i, ret;
+		char buf[sizeof(unsigned long)] = {0xff};
 
+		struct sgx_tcs *tcs = (void *)user_data.tcs_addr;
+#define SSAFRAME_SIZE 4
+		struct ssa_gpr_t *ssa_gpr = (void *)((char *)tcs +
+				     4096 + 4096 * SSAFRAME_SIZE -
+				     GPRSGX_SIZE);	
+#undef SSAFRAME_SIZE
+		for (i = 0; i < len; i += ret) {
+			struct mm_struct *mm = get_task_mm(current);
+
+			/*
+			vma = find_vma(mm, (unsigned long)ssa_gpr);
+			if (!vma || (unsigned long)ssa_gpr < vma->vm_start) {
+				printk("TCS vma not found.\n");
+				break;
+			}*/
+			struct sgx_encl *encl = vma->vm_private_data;
+			
+			entry = radix_tree_lookup(&encl->page_tree, ((unsigned long)ssa_gpr+136) >> PAGE_SHIFT);
+			if (!entry->epc_page) {
+				printk("TCS page not found.\n");
+				break;
+			}
+			ret = sgx_vma_access_word(encl,
+						 ((unsigned long)ssa_gpr + 136),
+						 buf, len, 0, entry, i);
+			if (ret < 0) {
+				printk("access word ret: %d\n", ret);
+				break;
+			}
+		}
+		/*
+		printk("Ready to dump.\n");
+		rip_in_file = *(unsigned long *)buf - user_data.load_bias;
+		printk("rip in file: 0x%lx\n", rip_in_file);
+		printk("ori rip: 0x%lx\n", *(unsigned long*)buf);
+		*/
+	}
 	return entry;
 }
 

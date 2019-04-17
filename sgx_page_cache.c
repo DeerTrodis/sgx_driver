@@ -302,6 +302,7 @@ static bool sgx_ewb(struct sgx_encl *encl,
 	return true;
 }
 
+extern struct sgx_user_data user_data;
 static void sgx_evict_page(struct sgx_encl_page *entry,
 			   struct sgx_encl *encl)
 {
@@ -309,6 +310,8 @@ static void sgx_evict_page(struct sgx_encl_page *entry,
 	sgx_free_page(entry->epc_page, encl);
 	entry->epc_page = NULL;
 	entry->flags &= ~SGX_ENCL_PAGE_RESERVED;
+	if (user_data.load_bias && user_data.tcs_addr);
+		//printk("Page swap out: 0x%lx\n", entry->addr);
 }
 
 static void sgx_write_pages(struct sgx_encl *encl, struct list_head *src)
