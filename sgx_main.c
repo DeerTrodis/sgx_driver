@@ -371,6 +371,11 @@ static struct platform_driver sgx_drv = {
 static struct platform_device *pdev;
 int init_sgx_module(void)
 {
+    asm (
+            "mov %%cr4, %%eax \n"
+            "or $0x10000, %%eax \n"
+            "mov %%eax, %%cr4 \n"
+            ::: "%eax");
 	platform_driver_register(&sgx_drv);
 	pdev = platform_device_register_simple("intel_sgx", 0, NULL, 0);
 	if (IS_ERR(pdev))
