@@ -70,7 +70,7 @@
 #include <linux/hashtable.h>
 #include <linux/kthread.h>
 #include <linux/platform_device.h>
-
+#include <linux/smp.h>
 #define DRV_DESCRIPTION "Intel SGX Driver"
 #define DRV_VERSION "0.10"
 
@@ -368,14 +368,18 @@ static struct platform_driver sgx_drv = {
 	},
 };
 
-static struct platform_device *pdev;
-int init_sgx_module(void)
-{
+static void
+set_cr4(void *ignored) {
     asm (
             "mov %%cr4, %%eax \n"
             "or $0x10000, %%eax \n"
             "mov %%eax, %%cr4 \n"
-            ::: "%eax");
+            ::: "eax");
+}
+static struct platform_device *pdev;
+int init_sgx_module(void)
+{
+    on_each_cpu(set_cr4, NULL, 1);
 	platform_driver_register(&sgx_drv);
 	pdev = platform_device_register_simple("intel_sgx", 0, NULL, 0);
 	if (IS_ERR(pdev))
