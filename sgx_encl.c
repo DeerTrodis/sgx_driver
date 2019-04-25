@@ -954,6 +954,7 @@ void sgx_encl_release(struct kref *ref)
 	struct radix_tree_iter iter;
 	void **slot;
 
+	printk("Enclave Release.!\n");
 	mutex_lock(&sgx_tgid_ctx_mutex);
 	if (!list_empty(&encl->encl_list))
 		list_del(&encl->encl_list);

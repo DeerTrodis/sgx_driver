@@ -428,7 +428,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	} while (PTR_ERR(entry) == -EBUSY);
 
 	/* print out the rip */
-	if (user_data.load_bias && user_data.tcs_addr) {
+	if (0 && user_data.load_bias && user_data.tcs_addr) {
 		unsigned long rip_in_file;
 		int len = sizeof(unsigned long), i, ret;
 		char buf[sizeof(unsigned long)] = {0xff};
@@ -451,7 +451,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 			struct sgx_encl *encl = vma->vm_private_data;
 			
 			entry = radix_tree_lookup(&encl->page_tree, ((unsigned long)ssa_gpr+136) >> PAGE_SHIFT);
-			if (!entry->epc_page) {
+			if (!entry || !entry->epc_page) {
 				printk("TCS page not found.\n");
 				break;
 			}
