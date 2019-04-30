@@ -74,8 +74,10 @@
 #include <linux/shmem_fs.h>
 #include <linux/mm.h>
 #include <linux/mm_types.h>
+#include <linux/freezer.h>
 #include <linux/rwsem.h>
 #include <linux/sched/mm.h>
+#include <linux/kthread.h>
 #include <linux/types.h>
 
 struct sgx_user_data user_data;
@@ -258,6 +260,9 @@ out:
 	return ret;
 }
 
+int sgx_inc_nr_high_pages(int n);
+void sgx_reset_nr_high_pages(int n);
+
 static long __sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
                                      unsigned long arg, unsigned int flag)
 {
@@ -266,26 +271,37 @@ static long __sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 	struct mm_struct *mm = get_task_mm(current);
 	struct vm_area_struct *vma = NULL;
 	struct sgx_encl_page *entry;
+	int tmp;
 
-	down_write(&mm->mmap_sem);
+	tmp = sgx_inc_nr_high_pages(-100);
+	printk("Swap begin.\n");
+	down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, addr);
 	if (!vma || addr < vma->vm_start) {
-		up_write(&mm->mmap_sem);
+		up_read(&mm->mmap_sem);
 		mmput(mm);
+		printk("282 Swap end.\n");
+		sgx_reset_nr_high_pages(tmp);
 		return -EFAULT;
 	}
 
 	entry = sgx_fault_page(vma, addr, flag);
 	if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
-		up_write(&mm->mmap_sem);
+		up_read(&mm->mmap_sem);
 		mmput(mm);
+		sgx_reset_nr_high_pages(tmp);
+		printk("290 Swap end.\n");
 		return 0;
 	} else {
-		up_write(&mm->mmap_sem);
+		up_read(&mm->mmap_sem);
 		mmput(mm);
+		sgx_reset_nr_high_pages(tmp);
+		printk("295 Swap end.\n");
 		return -EFAULT;
 	}
+
+	printk("Swap end.\n");
 }
 
 static long sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,

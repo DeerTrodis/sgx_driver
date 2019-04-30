@@ -883,6 +883,8 @@ static int sgx_einit(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 	return ret;
 }
 
+unsigned int sgx_get_nr_free_pages(void);
+
 /**
  * sgx_encl_init - perform EINIT for the given enclave
  *
@@ -911,6 +913,7 @@ int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 
 	if (encl->flags & SGX_ENCL_INITIALIZED) {
 		mutex_unlock(&encl->lock);
+		printk("[916] Enclave launched, nr_free_pages: %u\n", sgx_get_nr_free_pages());
 		return 0;
 	}
 
@@ -937,12 +940,14 @@ int sgx_encl_init(struct sgx_encl *encl, struct sgx_sigstruct *sigstruct,
 	mutex_unlock(&encl->lock);
 
 	if (ret) {
+		printk("[943] EINIT returned %d, nr_free_pages: %u\n", ret, sgx_get_nr_free_pages());
 		if (ret > 0)
 			sgx_dbg(encl, "EINIT returned %d\n", ret);
 		return ret;
 	}
 
 	encl->flags |= SGX_ENCL_INITIALIZED;
+	printk("[950] Enclave launched, nr_free_pages: %u\n", sgx_get_nr_free_pages());
 	return 0;
 }
 
@@ -954,7 +959,6 @@ void sgx_encl_release(struct kref *ref)
 	struct radix_tree_iter iter;
 	void **slot;
 
-	printk("Enclave Release.!\n");
 	mutex_lock(&sgx_tgid_ctx_mutex);
 	if (!list_empty(&encl->encl_list))
 		list_del(&encl->encl_list);
@@ -995,4 +999,5 @@ void sgx_encl_release(struct kref *ref)
 		fput(encl->pcmd);
 
 	kfree(encl);
+	printk("Enclave Release. nr_free_pages: %u\n", sgx_get_nr_free_pages());
 }

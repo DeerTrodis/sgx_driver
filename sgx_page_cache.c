@@ -83,8 +83,20 @@ static unsigned int sgx_nr_total_epc_pages;
 static unsigned int sgx_nr_free_pages;
 static unsigned int sgx_nr_low_pages = SGX_NR_LOW_EPC_PAGES_DEFAULT;
 static unsigned int sgx_nr_high_pages;
-static struct task_struct *ksgxswapd_tsk;
+struct task_struct *ksgxswapd_tsk;
 static DECLARE_WAIT_QUEUE_HEAD(ksgxswapd_waitq);
+
+int sgx_inc_nr_high_pages(int n)
+{
+	int tmp = sgx_nr_high_pages;
+	sgx_nr_high_pages = sgx_nr_high_pages + n;
+	return tmp;
+}
+
+void sgx_reset_nr_high_pages(int tmp)
+{
+	sgx_nr_high_pages = tmp;
+}
 
 static int sgx_test_and_clear_young_cb(pte_t *ptep, pgtable_t token,
 				       unsigned long addr, void *data)
@@ -310,8 +322,6 @@ static void sgx_evict_page(struct sgx_encl_page *entry,
 	sgx_free_page(entry->epc_page, encl);
 	entry->epc_page = NULL;
 	entry->flags &= ~SGX_ENCL_PAGE_RESERVED;
-	if (user_data.load_bias && user_data.tcs_addr);
-		//printk("Page swap out: 0x%lx\n", entry->addr);
 }
 
 static void sgx_write_pages(struct sgx_encl *encl, struct list_head *src)
@@ -392,8 +402,10 @@ static int ksgxswapd(void *p)
 				     kthread_should_stop() ||
 				     sgx_nr_free_pages < sgx_nr_high_pages);
 
-		if (sgx_nr_free_pages < sgx_nr_high_pages)
+		if (sgx_nr_free_pages < sgx_nr_high_pages) {
+			printk("%s: swap out", __func__);
 			sgx_swap_pages(SGX_NR_SWAP_CLUSTER_MAX);
+		}
 	}
 
 	pr_info("%s: done\n", __func__);
@@ -516,6 +528,7 @@ struct sgx_epc_page *sgx_alloc_page(unsigned int flags)
 			break;
 		}
 
+		printk("%s: swap out", __func__);
 		sgx_swap_pages(SGX_NR_SWAP_CLUSTER_MAX);
 		schedule();
 	}
@@ -552,6 +565,10 @@ void sgx_free_page(struct sgx_epc_page *entry, struct sgx_encl *encl)
 	list_add(&entry->list, &sgx_free_list);
 	sgx_nr_free_pages++;
 	spin_unlock(&sgx_free_list_lock);
+}
+
+unsigned int sgx_get_nr_free_pages(void) {
+	return sgx_nr_free_pages;
 }
 
 void *sgx_get_page(struct sgx_epc_page *entry)

@@ -414,13 +414,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	info.si_signo = SIGTRAP;
 	info.si_code = SI_QUEUE; /* Nevermind this */
 
-	if (user_data.load_bias && user_data.tcs_addr)
-		printk("Page Fault Happens: 0x%lx!\n", addr);
-/*
-	if ((pid_t)atomic64_read(&signal_pid_flag) == current->tgid)
-		if (send_sig_info(60, &info, current) < 0)
-			printk("%s: Send signal failed.\n", __func__);
-*/
+	printk("Page Fault Happens: 0x%lx!\n", addr);
 	do {
 		entry = sgx_do_fault(vma, addr, flags);
 		if (!(flags & SGX_FAULT_RESERVE))
@@ -428,7 +422,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	} while (PTR_ERR(entry) == -EBUSY);
 
 	/* print out the rip */
-	if (0 && user_data.load_bias && user_data.tcs_addr) {
+	if (user_data.load_bias && user_data.tcs_addr) {
 		unsigned long rip_in_file;
 		int len = sizeof(unsigned long), i, ret;
 		char buf[sizeof(unsigned long)] = {0xff};
@@ -437,7 +431,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 #define SSAFRAME_SIZE 4
 		struct ssa_gpr_t *ssa_gpr = (void *)((char *)tcs +
 				     4096 + 4096 * SSAFRAME_SIZE -
-				     GPRSGX_SIZE);	
+				     GPRSGX_SIZE);
 #undef SSAFRAME_SIZE
 		for (i = 0; i < len; i += ret) {
 			struct mm_struct *mm = get_task_mm(current);
@@ -463,12 +457,9 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 				break;
 			}
 		}
-		/*
-		printk("Ready to dump.\n");
+		
 		rip_in_file = *(unsigned long *)buf - user_data.load_bias;
 		printk("rip in file: 0x%lx\n", rip_in_file);
-		printk("ori rip: 0x%lx\n", *(unsigned long*)buf);
-		*/
 	}
 	return entry;
 }
