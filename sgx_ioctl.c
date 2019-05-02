@@ -273,16 +273,16 @@ static long __sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 	struct sgx_encl_page *entry;
 	int tmp;
 
-	tmp = sgx_inc_nr_high_pages(-100);
-	printk("Swap begin.\n");
+	//tmp = sgx_inc_nr_high_pages(-100);
+	//printk("Swap begin.\n");
 	down_read(&mm->mmap_sem);
 
 	vma = find_vma(mm, addr);
 	if (!vma || addr < vma->vm_start) {
 		up_read(&mm->mmap_sem);
 		mmput(mm);
-		printk("282 Swap end.\n");
-		sgx_reset_nr_high_pages(tmp);
+		//printk("282 Swap end.\n");
+		//sgx_reset_nr_high_pages(tmp);
 		return -EFAULT;
 	}
 
@@ -290,14 +290,14 @@ static long __sgx_ioc_enclave_swap_page(struct file *filep, unsigned int cmd,
 	if (!IS_ERR(entry) || PTR_ERR(entry) == -EBUSY) {
 		up_read(&mm->mmap_sem);
 		mmput(mm);
-		sgx_reset_nr_high_pages(tmp);
-		printk("290 Swap end.\n");
+		//sgx_reset_nr_high_pages(tmp);
+		//printk("290 Swap end.\n");
 		return 0;
 	} else {
 		up_read(&mm->mmap_sem);
 		mmput(mm);
-		sgx_reset_nr_high_pages(tmp);
-		printk("295 Swap end.\n");
+		//sgx_reset_nr_high_pages(tmp);
+		//printk("295 Swap end.\n");
 		return -EFAULT;
 	}
 
