@@ -414,7 +414,7 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	info.si_signo = SIGTRAP;
 	info.si_code = SI_QUEUE; /* Nevermind this */
 
-	printk("Page Fault Happens: 0x%lx!\n", addr);
+	//printk("Page Fault Happens: 0x%lx!\n", addr);
 	do {
 		entry = sgx_do_fault(vma, addr, flags);
 		if (!(flags & SGX_FAULT_RESERVE))

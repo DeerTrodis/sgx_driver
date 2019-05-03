@@ -324,6 +324,8 @@ static void sgx_evict_page(struct sgx_encl_page *entry,
 	entry->flags &= ~SGX_ENCL_PAGE_RESERVED;
 }
 
+DEFINE_SPINLOCK(eblock_lock);
+
 static void sgx_write_pages(struct sgx_encl *encl, struct list_head *src)
 {
 	struct sgx_epc_page *entry;
@@ -336,7 +338,8 @@ static void sgx_write_pages(struct sgx_encl *encl, struct list_head *src)
 
 	entry = list_first_entry(src, struct sgx_epc_page, list);
 
-	mutex_lock(&encl->lock);
+	//mutex_lock(&encl->lock);
+	spin_lock(&eblock_lock);
 
 	/* EBLOCK */
 	list_for_each_entry_safe(entry, tmp, src, list) {
@@ -349,24 +352,26 @@ static void sgx_write_pages(struct sgx_encl *encl, struct list_head *src)
 
 	/* ETRACK */
 	sgx_etrack(encl);
-
-	mutex_unlock(&encl->lock);
+	spin_unlock(&eblock_lock);
+	//mutex_unlock(&encl->lock);
 	/* EWB */
 	while (!list_empty(src)) {
-	    mutex_lock(&encl->lock);
+		//mutex_lock(&encl->lock);
 		entry = list_first_entry(src, struct sgx_epc_page, list);
 		list_del(&entry->list);
 		sgx_evict_page(entry->encl_page, encl);
 		encl->secs_child_cnt--;
-	    mutex_unlock(&encl->lock);
+		//mutex_unlock(&encl->lock);
 	}
 
+	/*
 	mutex_lock(&encl->lock);
 	if (!encl->secs_child_cnt && (encl->flags & SGX_ENCL_INITIALIZED)) {
 		sgx_evict_page(&encl->secs, encl);
 		encl->flags |= SGX_ENCL_SECS_EVICTED;
 	}
-    mutex_unlock(&encl->lock);
+	mutex_unlock(&encl->lock);
+	*/
 }
 
 static void sgx_swap_pages(unsigned long nr_to_scan)
@@ -406,7 +411,7 @@ static int ksgxswapd(void *p)
 				     sgx_nr_free_pages < sgx_nr_high_pages);
 
 		if (sgx_nr_free_pages < sgx_nr_high_pages) {
-			printk("%s: swap out", __func__);
+			//printk("%s: swap out", __func__);
 			sgx_swap_pages(SGX_NR_SWAP_CLUSTER_MAX);
 		}
 	}
