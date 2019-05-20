@@ -957,6 +957,7 @@ void sgx_encl_release(struct kref *ref)
 	struct sgx_va_page *va_page;
 	struct sgx_encl *encl = container_of(ref, struct sgx_encl, refcount);
 	struct radix_tree_iter iter;
+	struct sgx_user_data u_data = {.load_bias = 0, .tcs_addr = 0};
 	void **slot;
 
 	mutex_lock(&sgx_tgid_ctx_mutex);
@@ -999,5 +1000,6 @@ void sgx_encl_release(struct kref *ref)
 		fput(encl->pcmd);
 
 	kfree(encl);
+	sgx_ioctl(NULL, SGX_IOC_ENCLAVE_SET_USER_DATA, (unsigned long)&u_data);
 	printk("Enclave Release. nr_free_pages: %u\n", sgx_get_nr_free_pages());
 }

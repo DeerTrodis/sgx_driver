@@ -422,44 +422,124 @@ struct sgx_encl_page *sgx_fault_page(struct vm_area_struct *vma,
 	} while (PTR_ERR(entry) == -EBUSY);
 
 	/* print out the rip */
-	if (user_data.load_bias && user_data.tcs_addr) {
-		unsigned long rip_in_file;
-		int len = sizeof(unsigned long), i, ret;
-		char buf[sizeof(unsigned long)] = {0xff};
+	if (!user_data.load_bias || !user_data.tcs_addr)
+		return entry;
 
-		struct sgx_tcs *tcs = (void *)user_data.tcs_addr;
+	{
+
+	unsigned long rip_in_file, bp;
+	int len = sizeof(unsigned long), i, ret;
+	char buf[sizeof(unsigned long)] = {0xff};
+	unsigned long old_func = 0;
+
+	struct sgx_tcs *tcs = (void *)user_data.tcs_addr;
 #define SSAFRAME_SIZE 4
-		struct ssa_gpr_t *ssa_gpr = (void *)((char *)tcs +
-				     4096 + 4096 * SSAFRAME_SIZE -
-				     GPRSGX_SIZE);
+	struct ssa_gpr_t *ssa_gpr = (void *)((char *)tcs +
+			     4096 + 4096 * SSAFRAME_SIZE -
+			     GPRSGX_SIZE);
 #undef SSAFRAME_SIZE
-		for (i = 0; i < len; i += ret) {
-			struct mm_struct *mm = get_task_mm(current);
+	for (i = 0; i < len; i += ret) {
+		struct sgx_encl *encl = vma->vm_private_data;
+		mutex_lock(&encl->lock);
 
-			/*
-			vma = find_vma(mm, (unsigned long)ssa_gpr);
-			if (!vma || (unsigned long)ssa_gpr < vma->vm_start) {
-				printk("TCS vma not found.\n");
-				break;
-			}*/
+		entry = radix_tree_lookup(&encl->page_tree, ((unsigned long)ssa_gpr+136) >> PAGE_SHIFT);
+		if (!entry || !entry->epc_page) {
+			mutex_unlock(&encl->lock);
+			break;
+		}
+		ret = sgx_vma_access_word(encl,
+					 ((unsigned long)ssa_gpr + 136),
+					 buf, len, 0, entry, i);
+		mutex_unlock(&encl->lock);
+		if (ret < 0) {
+			printk("access word ret: %d\n", ret);
+			break;
+		}
+	}
+
+	rip_in_file = *(unsigned long *)buf - user_data.load_bias;
+	if (rip_in_file & (1UL << 63))
+		return entry;
+	printk("------------ call stack -------------\n");
+	printk("rip in file: 0x%lx\n", rip_in_file);
+
+	for (i = 0; i < len; i += ret) {
+		struct sgx_encl *encl = vma->vm_private_data;
+
+		mutex_lock(&encl->lock);
+		entry = radix_tree_lookup(&encl->page_tree, ((unsigned long)ssa_gpr+40) >> PAGE_SHIFT);
+		if (!entry || !entry->epc_page) {
+			mutex_unlock(&encl->lock);
+			break;
+		}
+		ret = sgx_vma_access_word(encl,
+					 ((unsigned long)ssa_gpr + 40),
+					 buf, len, 0, entry, i);
+
+		mutex_unlock(&encl->lock);
+		if (ret < 0) {
+			printk("access word ret: %d\n", ret);
+			break;
+		}
+	}
+
+	bp = *(unsigned long *)buf;
+
+	while (bp) {
+		unsigned long func;
+		for (i = 0; i < len; i += ret) {
 			struct sgx_encl *encl = vma->vm_private_data;
-			
-			entry = radix_tree_lookup(&encl->page_tree, ((unsigned long)ssa_gpr+136) >> PAGE_SHIFT);
+
+			mutex_lock(&encl->lock);
+			entry = radix_tree_lookup(&encl->page_tree,
+					          ((unsigned long)bp+sizeof(unsigned long)) >> PAGE_SHIFT);
 			if (!entry || !entry->epc_page) {
-				printk("TCS page not found.\n");
+				mutex_unlock(&encl->lock);
 				break;
 			}
 			ret = sgx_vma_access_word(encl,
-						 ((unsigned long)ssa_gpr + 136),
+						 (unsigned long)bp+sizeof(unsigned long),
 						 buf, len, 0, entry, i);
+			mutex_unlock(&encl->lock);
 			if (ret < 0) {
 				printk("access word ret: %d\n", ret);
 				break;
 			}
 		}
-		
-		rip_in_file = *(unsigned long *)buf - user_data.load_bias;
-		printk("rip in file: 0x%lx\n", rip_in_file);
+		func = *(unsigned long *)buf - user_data.load_bias;
+		if (func == old_func)
+			break;
+		old_func = func;
+		if (func & (1UL << 63))
+			break;
+		printk("rip in file: 0x%lx\n", func);
+
+		if ((long)func <= 0)
+			break;
+
+		for (i = 0; i < len; i += ret) {
+			struct sgx_encl *encl = vma->vm_private_data;
+
+			mutex_lock(&encl->lock);
+			entry = radix_tree_lookup(&encl->page_tree,
+					          ((unsigned long)bp) >> PAGE_SHIFT);
+			if (!entry || !entry->epc_page) {
+				mutex_unlock(&encl->lock);
+				break;
+			}
+			ret = sgx_vma_access_word(encl,
+						 (unsigned long)bp,
+						 buf, len, 0, entry, i);
+			mutex_unlock(&encl->lock);
+			if (ret < 0) {
+				printk("access word ret: %d\n", ret);
+				break;
+			}
+		}
+		bp = *(unsigned long *)buf;
+	}
+	printk("------------ call stack end -------------\n");
+
 	}
 	return entry;
 }
